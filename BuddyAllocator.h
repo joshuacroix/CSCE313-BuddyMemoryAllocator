@@ -12,20 +12,66 @@ public:
 	// think about what else should be included as member variables
 	int block_size;  // size of the block
 	BlockHeader* next; // pointer to the next block
+	bool is_free; //Boolean to see if the memory is free
 };
 
 class LinkedList{
 	// this is a special linked list that is made out of BlockHeader s. 
-public:
-	BlockHeader* head;		// you need a head of the list
+private:
+	BlockHeader* head = nullptr;		// you need a head of the list
+	int size = 0;
 public:
 	void insert (BlockHeader* b){	// adds a block to the list
+		if(size <= 0){    // Empty case
+			head = b;
+			size = 1;
+			}
+		else { //Blockheader becomes new block
+			BlockHeader* old_head = nullptr;
+			old_head = head;
+			head = b;
+			head->next = old_head;
+			size+=1;
+			}
 
 	}
 
 	void remove (BlockHeader* b){  // removes a block from the list
+		BlockHeader* curr = head;
+		//If you're removing the head and there is a next
+		if((curr == b) && (curr->next != nullptr)){
+			head = curr->next;
+			size-=1;
+		}
+		//If you're removing the head and there isn't a next
+		else if((curr == b) && (curr->next == nullptr)){
+			head = nullptr;
+			size =0;
+		}
+		//If you aren't removing the head and need to find it
+		else{
+			for(int i = 1; i < size; i++) {
+				//skips over the b in the chain, removing it
+				if ((curr->next == b) && (curr->next->next != nullptr)){
+					curr->next = curr->next->next;
+					size-=1;
+					//Might want to put in an early break from the for loop to increase speed.
+				}
+				else if((curr->next == b && (curr->next->next == nullptr){
+					curr->next == nullptr;
+					size-=1;
+				}
+				else {
+					curr = curr->next;
+				}
+			}
+		}
 
 	}
+//Consider Blockheader* get_head() {return head;}
+//Consider int get_size(){return size;}
+//Consider ~LinkedList(){Stuff} to get rid of all the blockheader* nodes
+
 };
 
 
@@ -35,6 +81,10 @@ private:
 	vector<LinkedList> FreeList;
 	int basic_block_size;
 	int total_memory_size;
+	//mine below
+	int memory_levels;	
+	int free_size;
+	char start_point;
 
 private:
 	/* private function you are required to implement
@@ -58,11 +108,7 @@ private:
 
 public:
 	BuddyAllocator (int _basic_block_size, int _total_memory_length); 
-	/* This initializes the memory allocator and makes a portion of 
-	   ’_total_memory_length’ bytes available. The allocator uses a ’_basic_block_size’ as 
-	   its minimal unit of allocation. The function returns the amount of 
-	   memory made available to the allocator. 
-	*/ 
+	
 
 	~BuddyAllocator(); 
 	/* Destructor that returns any allocated memory back to the operating system. 
