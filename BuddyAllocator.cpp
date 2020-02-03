@@ -1,111 +1,125 @@
 #include "BuddyAllocator.h"
 #include <iostream>
+#include <vector>
 using namespace std;
 
-/* This initializes the memory allocator and makes a portion of ’_total_memory_length’ bytes available. The allocator uses a ’_basic_block_size’ as its minimal unit of allocation. The function 
-returns the amount of memory made available to the allocator. */ 
 BuddyAllocator::BuddyAllocator (int _basic_block_size, int _total_memory_length){
-	//This fixes user putting in a non-binary basic block size.
-	int block_binary_fixer = 1;
-	for(int i = 1; i <= _basic_block_size, i*=2){
-		block_binary_fixer = i;
-	}
-	basic_block_size = block_binary_fixer;
+        //This portion is for fixing non-binary input
+        int binary_block_fixer;
+        for(int i = 1; i < _basic_block_size; i*=2) {
+                binary_block_fixer = i;
+        }
+        binary_block_fixer *= 2;
+        basic_block_size = binary_block_fixer;
 
-	//Now we standardize the total memory length to the basic block size, so that memory length can only be a multiple of the basic block size.
-	int memory_fixer = 1;
-	for(int i = basic_block_size; i <= _total_memory_length; i+=basic_block_size) {
-		memory_fixer = i;
-	}
+        int totmem_fixer;
+        level_index = 0;
+        for(int i = basic_block_size; i < _total_memory_length; i *= 2) {
+                totmem_fixer = i;
+                level_index += 1;
+        }
+        totmem_fixer *= 2;
+        total_memory_size = totmem_fixer;
 
-	total_memory_size = memory_fixer;
-	int level_finder = 0;
-	for (int i = basic_block_size; i < total_memory_size; i*=2;){
-		level_finder+=1;
-	}
-	memory_levels = level_finder;
-	cout << "Your basic block size has been changed to " << basic_block_size << endl;
-	cout << "Your total memory length has been changed to " << total_memory_size << endl;
-	cout << "There are " << memory_levels << "levels of blocks" << endl;
+        cout << "New Basic Block Size: " << basic_block_size << endl;
+        cout << "New Total Memory Length: " << total_memory_size << endl;
+        cout << "Level Index Generated: 0->" << level_index << endl;
 
-	//That should handle getting all of the blocks and memory sizes compatable. I'm not really sure how I'm doing this next bit. Pay attention to this and the header variables required for this.
-	
-	start_pointer = new char[_total_memory_length];
-	free_size = log2(total_memory_size) - log2(basic_block_size) + 1;
-	FreeList.resize(free_size);
-	FreeList[0].insert((BlockHeader*)start_pointer);
-	FreeList[0].head->block_size = total_memory_size;
-	FreeList[0].head->is_free = true;
-	
-
+        //This is going to set up the first block header on the free list
+        base = new char[total_memory_size];
+        BlockHeader* base_head = reinterpret_cast<BlockHeader*>(base);
+        base_head->block_size = total_memory_size;
+	base_head->next = nullptr;
+        base_head->is_free = true;
+        FreeList.resize(level_index+1);//level index does not match (resize)
+        FreeList[level_index].insert(base_head);//
 }
 
 BuddyAllocator::~BuddyAllocator (){
-	delete[] start_pointer;
+        delete[] base;
+
 }
 
-void* BuddyAllocator::alloc(int length) {
-  /* This preliminary implementation simply hands the call over the 
-     the C standard library! 
+void* BuddyAllocator::alloc(int _length) {
+  /* This preliminary implementation simply hands the call over the
+     the C standard library!
      Of course this needs to be replaced by your implementation.
   */
+        int real_size = _length + sizeof(BlockHeader);
+        int find_index = 0;
+	int block_size_holder = basic_block_size;
+        for (int i = basic_block_size; i < real_size; i*=2){
+                find_index += 1;
+		
+        }
+        cout << "The find index is " << find_index << endl;
+        cout << "The level index is " << level_index << endl;
 
-	//So I think what I would do with this one is use ceil(log(length)/log(2)), which should be the smallest block that will fit the program.
+        //Now that we know which level of free list the needed memory is, we work our way up the list.
+        int hold_index = find_index; //This is just to use for removal later
+        LinkedList *list = nullptr;
+        int split_counter = 0;
+        BlockHeader* return_ptr = nullptr;
+	
+        while ((find_index<=level_index)&&(list==nullptr)){ //Finds a non empty list
+                if(FreeList[find_index].get_size()!=0){
+                        list = &(FreeList[find_index]);
+                        cout << "address found: " << &(FreeList[find_index]) << endl;
+                        //cout << "IF LOOP" << endl;
+                }
+                else
+                {
+                        find_index += 1;
+                        split_counter += 1;
+                        //cout << "ELSE" << endl;
+                }
+                //cout << "While loop " << endl;
+        }
+	
+	for (int i = 0; i < find_index; i++) {
+		block_size_holder *= 2;
+	}
 
-	//if first block size > needed allocation, then remove from the list and allocate, else iterate down the list and compare. When you find a block, then remove it from the free store.
-  return malloc (length);
+        cout << "split counter = " << split_counter << endl;
+        if (list == nullptr){
+                cout << "RETURN NULL / No memory left" << endl;
+                return nullptr;
+        }
+	//This just removes the found memory from FL
+	return_ptr = list->head; 
+	list->head = return_ptr->next;
+	list->size -= 1;
+	
+	return_ptr->block_size = block_size_holder;
+	cout << "return ptr set " << endl;
+	cout << "return_ptr address: " << return_ptr << endl;
+	cout << "return_ptr: " << return_ptr->block_size << endl;
+        //Splits as necessary
+        while(split_counter != 0) {
+                return_ptr = split(return_ptr);
+                split_counter -= 1;
+		
+        }
+        //Takes the block to be used
+        return_ptr->is_free = false;
+	cout << "return ptr to be removed: " << return_ptr << endl;
+	cout << "rtn ptr size to removed: " << return_ptr->block_size << endl;
+        FreeList[hold_index].remove(return_ptr);
+        //return malloc (_length); <----- (original given code)
+	cout <<"Made it to the end of alloc" << endl;
+        return return_ptr;
 }
 
 void BuddyAllocator::free(void* a) {
   /* Same here! */
-  free (a);
-}
-
-BlockHeader* BuddyAllocator::getbuddy (BlockHeader * addr){
-	// given a block address, this function returns the address of its buddy 
-	
-
-}
-
-bool BuddyAllocator::arebuddies (BlockHeader* block1, BlockHeader* block2){
-	// checks whether the two blocks are buddies are not
-	// note that two adjacent blocks are not buddies when they are different sizes
-	BlockHeader* buddy_check1 = getbuddy(block1);
-	BlockHeader* buddy_check2 = getbuddy(block2);
-	if((buddy_check1 == block2) && (buddy_check2 == block1))
-		return true;
-	else
-		return false;
-
-}
-
-BlockHeader* BuddyAllocator::merge (BlockHeader* block1, BlockHeader* block2){
-	// this function merges the two blocks returns the beginning address of the merged block
-	// note that either block1 can be to the left of block2, or the other way around
-
-
-}
-
-BlockHeader* BuddyAllocator::split (BlockHeader* block){
-	// splits the given block by putting a new header halfway through the block
-	// also, the original header needs to be corrected
-	BlockHeader* block2 = nullptr;
-	int level = log2(block->block_size)-log2(block_size);
-	FreeList[level].remove(block);
-	block->block_size = block->block_size / 2;
-	block2 = block;
-	block2 = block2 + block1->block_size;
-	block2->block_size = block1->block_size;
-	FreeList[level-1].insert(block);
-	FreeList[level-1].insert(block2);
-	return block;
+  //::free (a);
 }
 
 void BuddyAllocator::printlist (){
   cout << "Printing the Freelist in the format \"[index] (block size) : # of blocks\"" << endl;
   int64_t total_free_memory = 0;
-  for (int i=0; i<FreeList.size(); i++){
-    int blocksize = ((1<<i) * basic_block_size); // all blocks at this  are this size
+  for (int i=0; i<FreeList.size()+1; i++){
+    int blocksize = ((1<<i) * basic_block_size); // all blocks at this level are this size
     cout << "[" << i <<"] (" << blocksize << ") : ";  // block size at index should always be 2^i * bbs
     int count = 0;
     BlockHeader* b = FreeList [i].head;
@@ -122,7 +136,6 @@ void BuddyAllocator::printlist (){
       b = b->next;
     }
     cout << count << endl;
-    cout << "Amount of available free memory: " << total_free_memory << " byes" << endl;  
+    cout << "Amount of available free memory: " << total_free_memory << " bytes" << endl;
   }
 }
-
